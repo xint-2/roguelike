@@ -3,3 +3,4 @@ lib64
 bin/
 src/__pycache__/
 pyvenv.cfg
+game/__pycache__/
