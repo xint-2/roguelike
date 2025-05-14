@@ -17,15 +17,6 @@ class Position:
         # add a vector to this position.
         x, y = direction
         return self.__class__(self.x + x, self.y + y)
-    
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Position):
-            return NotImplemented
-        return self.x == other.x and self.y == other.y
-    
-    def __hash__(self) -> int:
-        return hash((self.x, self.y))
-
 
 @tcod.ecs.callbacks.register_component_changed(component=Position)
 def on_position_changed(entity : Entity, old: Position | None, new: Position | None) -> None:
@@ -44,6 +35,10 @@ class Graphic:
 
     ch: int = ord("!")
     fg: tuple[int, int, int] = (255, 255, 255)
+
+@attrs.define(frozen=False)
+class DoorState:
+    is_open: bool = False
 
 
 Gold: Final = ("Gold", int)

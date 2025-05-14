@@ -3,23 +3,23 @@ import attrs
 import tcod.console
 import tcod.event
 from tcod.event import KeySym
+from random import Random
+
 
 import g
 import game.menus
-import game.world_tools
-from game.components import Gold, Graphic, Position
+from game.world_tools import new_world
+from game.components import Gold, Graphic, Position, DoorState
 from game.constants import DIRECTION_KEYS, INTERACTION_KEYS, CARDINAL
 from game.tags import *
 from game.state import Push, Reset, State, StateResult
-
+from game.enemy import enemies_move_random
 
 @attrs.define()
 class InGame:
     # Primary in-game state.
-
     def on_event(self, event: tcod.event.Event) -> None:
         # tcod-ecs query, fetch player entity
-
         (player,) = g.world.Q.all_of(tags=[IsPlayer])
         match event:
             case tcod.event.Quit():
@@ -34,11 +34,18 @@ class InGame:
                     for wall in g.world.Q.all_of(components=[Position], tags=[IsWall])
                 ):
                     return
-                # check for traps // TODO: other immovables here?
+                # if a closed door is at new position, return
+                if any(
+                    door.components[Position] == new_position and not door.components[DoorState].is_open
+                    for door in g.world.Q.all_of(components=[Position, DoorState], tags=[IsDoor])
+                ):
+                    return
+
+                #  TODO: other immovables here? / traps
 
                 # player position is updated to new_position if there is no wall
                 player.components[Position] = new_position
-                print(f"Player position: {player.components[Position]}")
+                #print(f"Player position: {player.components[Position]}")
                 
                 # Auto pickup gold // TODO: reuse for other items, append to inventory
                 for gold in g.world.Q.all_of(components=[Gold], tags=[player.components[Position], IsItem]):
@@ -46,22 +53,30 @@ class InGame:
                     text = f"Picked up {gold.components[Gold]}g, total: {player.components[Gold]}g"
                     g.world[None].components[("Text", str)] = text
                     gold.clear()
+
+                # mobe enemies after player
+                enemies_move_random(g.world, g.world[None].components[Random])
+
                 return None
             
             # INTERACTION_KEYS // TODO: make new file for interactions
             case tcod.event.KeyDown(sym=sym) if sym in INTERACTION_KEYS:
-            # check adjacent tiles (including current position) for doors
+            # check adjacent tiles (including current position) for doors // TODO: ^^ seperate this
                 player_pos = player.components[Position]
+                # for directions (x,y) in all cardinal directions
                 for dx, dy in CARDINAL:
                     check_pos = Position(player_pos.x + dx, player_pos.y + dy)
-                    for door in g.world.Q.all_of(components=[Position], tags=[IsDoor]):
+                    for door in g.world.Q.all_of(components=[Position, DoorState], tags=[IsDoor]):
                         if door.components[Position] == check_pos:
-                            # example stoggle door state or print msg
-                            print(f"Interacted with door at {check_pos}")
-                            # door logic here
+                            door_state = door.components[DoorState]
+                            door_state.is_open = not door_state.is_open
+                            if door_state.is_open:
+                                door.components[Graphic] = Graphic(ord("/"), fg=(200, 180, 50))
+                                print(f"Opened door at {check_pos}")
+                            else:
+                                door.components[Graphic] = Graphic(ord("+"), fg=(200, 180, 50))
+                                print(f"Closed door at {check_pos}")
                             return None
-                print("No door nearby to interact with")
-
 
             case tcod.event.KeyDown(sym=KeySym.ESCAPE):
                 return Push(MainMenu())
@@ -113,6 +128,23 @@ class InGame:
             graphic = items.components[Graphic]
             console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
         
+
+        # draw level change
+        for level_change in g.world.Q.all_of(components=[Position,Graphic], tags=[IsLevelChange]):
+            pos = level_change.components[Position]
+            if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
+                continue
+            graphic = level_change.components[Graphic]
+            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
+
+        # draw enemies 
+        for enemy in g.world.Q.all_of(components=[Position,Graphic], tags=[IsActor, IsEnemy]):
+            pos = enemy.components[Position]
+            if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
+                continue
+            graphic = enemy.components[Graphic]
+            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg        
+
         # draw player
         for player in g.world.Q.all_of(components=[Position, Graphic], tags=[IsPlayer]):
             pos = player.components[Position]
@@ -120,7 +152,6 @@ class InGame:
                 continue
             graphic = player.components[Graphic]
             console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
- 
 
         if text := g.world[None].components.get(("Text", str)):
             console.print(x=0, y=console.height - 1, string=text, fg=(255, 255, 255), bg=(0, 0, 0))

@@ -12,6 +12,9 @@ IsPlayer: Final = "IsPlayer"
 IsActor: Final = "IsActor"
 # Entity is an actor.
 
+IsEnemy: Final = "IsEnemy"
+# is enemy
+
 IsGround: Final = "IsGround"
 # is ground
 
@@ -23,6 +26,9 @@ IsFloor: Final = "IsFloor"
 
 IsDoor: Final = "IsDoor"
 # is a door
+
+IsLevelChange: Final = "IsLevelChange"
+# level change stairs
 
 IsItem: Final = "IsItem"
 # Entity is an item.
