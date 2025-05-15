@@ -1,30 +1,33 @@
-# TODO: move all components (wall,floor,door,ground) -> components.py
+# TODO: move all components (wall,floor,door,ground) make classes?
 # TODO: replace square,rectangle with tcod draw_rect equivalent 
 # TODO: make a seperate file with graphics array -> array = (ch=(ord("#"), fg=(255, 255, 255), bg=(0, 0, 0), etc..)
 # TODO: make algorithm to generate dungeon
 
+
 from game.components import Position, Graphic, Gold, DoorState
 from game.tags import *
 
+# yields a position given a size
 def square(size: int):
     for x in range(size):
         for y in range(size):
             yield Position(x, y)
 
-
+# yields an Position given width and height
 def rectangle(width: int, height: int):
     for i in range(width):
         for j in range(height):
             yield Position(i, j)
+            
 
-# keeps items from spawning in things
+# keeps items from spawning in things // TODO: fix this, it does not work
 def can_spawn_item(world, position):
     for wall in world.Q.all_of(components=[Position], tags=[IsWall, IsItem, IsActor, IsDoor]):
         if wall.components[Position] == position:
             return False
     return True
 
-# draw player into
+# draw player 
 def draw_player(world, console_width, console_height):
     player = world[object()]
     player_position = Position(console_width // 2, console_height // 2)
@@ -66,7 +69,7 @@ def draw_square_room(world, size, offset_x, offset_y):
                 world[entity].clear
                 #print(f"Grass deleted at {offset_positon}")
     
-    # draw a door // TODO: make this into a interactable class (Open=False or Open=True) ("+" closed, "/" open)
+    # draw a door
         door_x = size // 2
         door_y = 0
 

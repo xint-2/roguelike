@@ -1,4 +1,5 @@
 # hold components for graphics and position of entities
+# holds other values for entities as well such as door value
 
 import attrs
 import tcod.ecs.callbacks
@@ -43,5 +44,4 @@ class DoorState:
 
 Gold: Final = ("Gold", int)
 # amount of gold.
-
 

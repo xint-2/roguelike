@@ -1,4 +1,6 @@
 # handle events and rendering of global state
+# UI/Menu stuff
+
 from __future__ import annotations
 
 import tcod.console

@@ -11,10 +11,12 @@ import game.menus
 from game.world_tools import new_world
 from game.components import Gold, Graphic, Position, DoorState
 from game.constants import DIRECTION_KEYS, INTERACTION_KEYS, CARDINAL
-from game.tags import *
+from game.tags import * # Make into a list?
 from game.state import Push, Reset, State, StateResult
-from game.enemy import enemies_move_random
 from game.FOV import recompute_fov, fov_map, TORCH_RADIUS
+from game.interaction import door_interaction, block_movement
+from game.enemy import enemies_move_random, enemy_pathfind
+
 
 @attrs.define()
 class InGame:
@@ -23,25 +25,17 @@ class InGame:
     def on_event(self, event: tcod.event.Event) -> None:
         # tcod-ecs query, fetch player entity
         (player,) = g.world.Q.all_of(tags=[IsPlayer])
+
+
         match event:
             case tcod.event.Quit():
                 raise SystemExit()
+        # MOVEMENT GO
             case tcod.event.KeyDown(sym=sym) if sym in DIRECTION_KEYS:
                 # new_position == players current position + new direction, POSITIONAL EVENTS
                 new_position = player.components[Position] + DIRECTION_KEYS[sym]
-                
-                # if wall is at new position, return (i.e cannot move through walls)
-                if any(
-                    wall.components[Position] == new_position
-                    for wall in g.world.Q.all_of(components=[Position], tags=[IsWall])
-                ):
-                    return
-                # if a closed door is at new position, return
-                if any(
-                    door.components[Position] == new_position and not door.components[DoorState].is_open
-                    for door in g.world.Q.all_of(components=[Position, DoorState], tags=[IsDoor])
-                ):
-                    return
+                if block_movement(g.world, new_position):
+                    return None
 
                 #  TODO: other immovables here? / traps
 
@@ -58,6 +52,9 @@ class InGame:
 
                 # move enemies after player
                 enemies_move_random(g.world, g.world[None].components[Random])
+                # pathfind for enemy
+                for enemy_entity in g.world.Q.all_of(components=[Position, Graphic], tags={IsEnemy}):
+                    enemy_pathfind(fov_map, player, enemy_entity)
 
                 # recompute fov after player movement
                 recompute_fov(fov_map, new_position.x, new_position.y, radius=TORCH_RADIUS)
@@ -66,24 +63,12 @@ class InGame:
 
                 return None
             
-            # INTERACTION_KEYS // TODO: make new file for interactions
+        # INTERACTION GO
             case tcod.event.KeyDown(sym=sym) if sym in INTERACTION_KEYS:
             # check adjacent tiles (including current position) for doors // TODO: ^^ seperate this
                 player_pos = player.components[Position]
-                # for directions (x,y) in all cardinal directions
-                for dx, dy in CARDINAL:
-                    check_pos = Position(player_pos.x + dx, player_pos.y + dy)
-                    for door in g.world.Q.all_of(components=[Position, DoorState], tags=[IsDoor]):
-                        if door.components[Position] == check_pos:
-                            door_state = door.components[DoorState]
-                            door_state.is_open = not door_state.is_open
-                            if door_state.is_open:
-                                door.components[Graphic] = Graphic(ord("/"), fg=(200, 180, 50))
-                                print(f"Opened door at {check_pos}")
-                            else:
-                                door.components[Graphic] = Graphic(ord("+"), fg=(200, 180, 50))
-                                print(f"Closed door at {check_pos}")
-                            return None
+                door_interaction(g.world, player, player_pos)
+
 
             case tcod.event.KeyDown(sym=KeySym.ESCAPE):
                 return Push(MainMenu())
@@ -91,92 +76,50 @@ class InGame:
                 return None
 
 
-    # TODO: split these into another file with classes
     def on_draw(self, console: tcod.console.Console) -> None:
-        visible = self.visible if self.visible is not None else fov_map.fov
+
         # only draw entities if they are visible
-
-        #draw the ground
-        for ground in g.world.Q.all_of(components=[Position, Graphic], tags=[IsGround]):
-            pos = ground.components[Position]
-            if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
-                continue
-            if not visible[pos.y, pos.x]:
-                continue
-            graphic = ground.components[Graphic]
-            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
+        visible = self.visible if self.visible is not None else fov_map.fov
         
-        # drawing walls and such
-        for immovable in g.world.Q.all_of(components=[Position, Graphic], tags=[IsWall]):
-            pos = immovable.components[Position]
+        # priority to determine which tile is drawn first
+        priority = {
+            IsPlayer: 5,
+            IsEnemy: 4,
+            IsActor: 3,
+            IsWall: 2,
+            IsDoor: 2,
+            IsItem: 1,
+            IsFloor: 0,
+            IsGround: -1,
+        }
+        tile_entities = {}
+
+        # for all entities in the world registry
+        for entity in g.world.Q.all_of(components=[Position, Graphic]):
+            pos = entity.components[Position]
+        # if the entity is within the bounds of the console
             if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
                 continue
+        # if the entity is not visible, go to next entity
             if not visible[pos.y, pos.x]:
                 continue
-            graphic = immovable.components[Graphic]
-            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
 
-        # drawing doors
-        for doors in g.world.Q.all_of(components=[Position, Graphic], tags=[IsDoor]):
-            pos = doors.components[Position]
-            if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
-                continue
-            if not visible[pos.y, pos.x]:
-                continue
-            graphic = doors.components[Graphic]
-            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
+        # Determine entity priority, loops over tags in a given entity
+            entity_priority = max((priority.get(tag, -2) for tag in getattr(entity, "tags", set())), default=-2)
+            key = (pos.y, pos.x)
+            if key not in tile_entities or entity_priority > tile_entities[key][0]:
+                tile_entities[key] = (entity_priority, entity)
 
-
-        # draw room floor
-        for floor in g.world.Q.all_of(components=[Position, Graphic], tags=[IsFloor]):
-            pos = floor.components[Position]
-            if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
-                continue
-            if not visible[pos.y, pos.x]:
-                continue
-            graphic = floor.components[Graphic]
-            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
-
-        # drawing items
-        for items in g.world.Q.all_of(components=[Position, Graphic], tags=[IsItem]):
-            pos = items.components[Position]
-            if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
-                continue
-            if not visible[pos.y, pos.x]:
-                continue
-            graphic = items.components[Graphic]
-            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
-        
-
-        # draw level change
-        for level_change in g.world.Q.all_of(components=[Position,Graphic], tags=[IsLevelChange]):
-            pos = level_change.components[Position]
-            if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
-                continue
-            if not visible[pos.y, pos.x]:
-                continue
-            graphic = level_change.components[Graphic]
-            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
-
-        # draw enemies 
-        for enemy in g.world.Q.all_of(components=[Position,Graphic], tags=[IsActor, IsEnemy]):
-            pos = enemy.components[Position]
-            if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
-                continue
-            graphic = enemy.components[Graphic]
-            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg        
-
-        # draw player
-        for player in g.world.Q.all_of(components=[Position, Graphic], tags=[IsPlayer]):
-            pos = player.components[Position]
-            if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
-                continue
-            graphic = player.components[Graphic]
-            console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
+        # Draw only the topmost entity at each tile
+        for (y, x), (_, entity) in tile_entities.items():
+            graphic = entity.components[Graphic]
+            console.ch[y, x] = graphic.ch
+            console.fg[y, x] = graphic.fg
+        # Optionally: console.bg[y, x] = graphic.bg if you use backgrounds
 
         if text := g.world[None].components.get(("Text", str)):
             console.print(x=0, y=console.height - 1, string=text, fg=(255, 255, 255), bg=(0, 0, 0))
-
+            
 
 class MainMenu(game.menus.ListMenu):
     
