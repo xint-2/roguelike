@@ -14,10 +14,12 @@ from game.constants import DIRECTION_KEYS, INTERACTION_KEYS, CARDINAL
 from game.tags import *
 from game.state import Push, Reset, State, StateResult
 from game.enemy import enemies_move_random
+from game.FOV import recompute_fov, fov_map, TORCH_RADIUS
 
 @attrs.define()
 class InGame:
     # Primary in-game state.
+    visible = attrs.field(default=None)
     def on_event(self, event: tcod.event.Event) -> None:
         # tcod-ecs query, fetch player entity
         (player,) = g.world.Q.all_of(tags=[IsPlayer])
@@ -54,8 +56,13 @@ class InGame:
                     g.world[None].components[("Text", str)] = text
                     gold.clear()
 
-                # mobe enemies after player
+                # move enemies after player
                 enemies_move_random(g.world, g.world[None].components[Random])
+
+                # recompute fov after player movement
+                recompute_fov(fov_map, new_position.x, new_position.y, radius=TORCH_RADIUS)
+                self.visible = fov_map.fov
+
 
                 return None
             
@@ -86,11 +93,15 @@ class InGame:
 
     # TODO: split these into another file with classes
     def on_draw(self, console: tcod.console.Console) -> None:
-        
+        visible = self.visible if self.visible is not None else fov_map.fov
+        # only draw entities if they are visible
+
         #draw the ground
         for ground in g.world.Q.all_of(components=[Position, Graphic], tags=[IsGround]):
             pos = ground.components[Position]
             if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
+                continue
+            if not visible[pos.y, pos.x]:
                 continue
             graphic = ground.components[Graphic]
             console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
@@ -100,6 +111,8 @@ class InGame:
             pos = immovable.components[Position]
             if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
                 continue
+            if not visible[pos.y, pos.x]:
+                continue
             graphic = immovable.components[Graphic]
             console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
 
@@ -107,6 +120,8 @@ class InGame:
         for doors in g.world.Q.all_of(components=[Position, Graphic], tags=[IsDoor]):
             pos = doors.components[Position]
             if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
+                continue
+            if not visible[pos.y, pos.x]:
                 continue
             graphic = doors.components[Graphic]
             console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
@@ -117,6 +132,8 @@ class InGame:
             pos = floor.components[Position]
             if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
                 continue
+            if not visible[pos.y, pos.x]:
+                continue
             graphic = floor.components[Graphic]
             console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
 
@@ -124,6 +141,8 @@ class InGame:
         for items in g.world.Q.all_of(components=[Position, Graphic], tags=[IsItem]):
             pos = items.components[Position]
             if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
+                continue
+            if not visible[pos.y, pos.x]:
                 continue
             graphic = items.components[Graphic]
             console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg
@@ -133,6 +152,8 @@ class InGame:
         for level_change in g.world.Q.all_of(components=[Position,Graphic], tags=[IsLevelChange]):
             pos = level_change.components[Position]
             if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
+                continue
+            if not visible[pos.y, pos.x]:
                 continue
             graphic = level_change.components[Graphic]
             console.rgb[["ch", "fg"]][pos.y, pos.x] = graphic.ch, graphic.fg

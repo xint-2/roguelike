@@ -1,3 +1,8 @@
+# TODO: enemies cannot move through immovables (walls, closed doors, etc...)
+# TODO: enemy FOV
+# TODO: enemy track and follow player once in FOV
+# enemy moves randomly till player comes into view
+
 
 from game.components import *
 from game.tags import IsActor, IsEnemy

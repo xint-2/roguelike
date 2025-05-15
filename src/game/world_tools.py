@@ -6,6 +6,7 @@ from random import Random
 from game.components import Graphic, Position
 from game.dungeon_draw import *
 from game.enemy import draw_enemies
+from game.FOV import update_fov_map_from_world
 
 
 # Think of the ECS registry as containing the world since this is how it will be used.
@@ -21,13 +22,11 @@ def new_world(console_width: int, console_height: int) -> Registry:
     
     # draw gold counds // TODO: make a seperate class for items
     draw_gold(world, 10, rng)
-
     
     # draw ground
     draw_ground(world, console_width)
 
-
-    # draw room
+    # draw rooms
     draw_square_room(world, 10, 10, 10)
     draw_rectangle_room(world, 10, 20, 30, 20)
 
@@ -37,4 +36,6 @@ def new_world(console_width: int, console_height: int) -> Registry:
     draw_enemies(world, rng, console_width, console_height)
     #draw enemies
 
+    update_fov_map_from_world(world)
+    # update FOV LAST!
     return world

@@ -26,20 +26,21 @@ def update_fov_map_from_world(world):
     # loop through all entities
     for entity in world.Q.all_of(components=[Position]):
         pos = entity.components[Position]
-        if IsWall in entity.tags:
-            # walls block vision and arent walkable
-            fov_map.walkable[pos.x, pos.y] = False
-            fov_map.transparent[pos.x,  pos.y] = False
-        elif IsDoor:
-            # closed doors block vision, open doors dont
-            door_state = entity.components.get[DoorState]
-            is_open = getattr(door_state, "is_open", False)
-            fov_map.walkable[pos.x, pos.y] = is_open
-            fov_map.transparent[pos.x, pos.y] = is_open
-        else:
-            # floors, ground, etc.
-            fov_map.walkable[pos.x, pos.y] = True
-            fov_map.transparent[pos.x, pos.y] = True
+        if 0 <= pos.x < MAP_WIDTH and 0 <= pos.y < MAP_HEIGHT:
+            if IsWall in entity.tags:
+                # walls block vision and arent walkable
+                fov_map.walkable[pos.y, pos.x] = False
+                fov_map.transparent[pos.y, pos.x] = False
+            elif IsDoor in entity.tags:
+                # closed doors block vision, open doors dont
+                door_state = entity.components.get(DoorState)
+                is_open = getattr(door_state, "is_open", False)
+                fov_map.walkable[pos.y, pos.x] = is_open
+                fov_map.transparent[pos.y, pos.x] = is_open
+            else:
+                # floors, ground, etc.
+                fov_map.walkable[pos.y, pos.x] = True
+                fov_map.transparent[pos.y, pos.x] = True
 
 def update_player_fov(world):
     player = next(world.Q.all_f(tags=[IsPlayer]))
