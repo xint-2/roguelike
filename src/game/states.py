@@ -15,7 +15,7 @@ from game.tags import * # Make into a list?
 from game.state import Push, Reset, State, StateResult
 from game.FOV import recompute_fov, fov_map, TORCH_RADIUS
 from game.interaction import door_interaction, block_movement
-from game.enemy import enemies_move_random, enemy_pathfind
+from game.enemy import enemies_move_random, enemy_pathfind, enemy_blocked
 
 
 @attrs.define()
@@ -50,11 +50,12 @@ class InGame:
                     g.world[None].components[("Text", str)] = text
                     gold.clear()
 
-                # move enemies after player
-                enemies_move_random(g.world, g.world[None].components[Random])
+
+                # move enemies after player // TODO: I dont like static 
+                enemies_move_random(g.world, 80, 50, g.world[None].components[Random])
                 # pathfind for enemy
                 for enemy_entity in g.world.Q.all_of(components=[Position, Graphic], tags={IsEnemy}):
-                    enemy_pathfind(fov_map, player, enemy_entity)
+                    enemy_pathfind(g.world, fov_map, player, enemy_entity)
 
                 # recompute fov after player movement
                 recompute_fov(fov_map, new_position.x, new_position.y, radius=TORCH_RADIUS)
@@ -88,6 +89,7 @@ class InGame:
             IsActor: 3,
             IsWall: 2,
             IsDoor: 2,
+            IsLevelChange: 2,
             IsItem: 1,
             IsFloor: 0,
             IsGround: -1,
