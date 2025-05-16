@@ -14,7 +14,7 @@ TORCH_RADIUS = 10
 
 # FOV initialization
 #--------------------
-# map takes widht and height of map // TODO: make this modular for given console size, define and import from constants?
+# map takes width and height of map // TODO: make this modular for given console size, define and import from constants?
 fov_map = tcod.map.Map(80, 50)
 # walkable is a boolean array walkable cells (walkable = True, can walk over)
 fov_map.walkable[10, 10] = True

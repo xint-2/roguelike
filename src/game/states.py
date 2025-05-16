@@ -10,12 +10,11 @@ import g
 import game.menus
 from game.world_tools import new_world
 from game.components import Gold, Graphic, Position, DoorState
-from game.constants import DIRECTION_KEYS, INTERACTION_KEYS, CARDINAL
+from game.constants import DIRECTION_KEYS, INTERACTION_KEYS
 from game.tags import * 
 from game.state import Push, Reset, State, StateResult
 from game.FOV import recompute_fov, fov_map, TORCH_RADIUS
-from game.interaction import door_interaction, block_movement, player_melee
-from game.enemy import enemies_move_random, enemy_pathfind, enemy_melee
+from game.classes import Player, Enemy
 
 
 @attrs.define()
@@ -26,43 +25,56 @@ class InGame:
         # tcod-ecs query, fetch player entity
         players = list(g.world.Q.all_of(tags=[IsPlayer]))
         if not players:
-            raise RuntimeError("No player entity found!")
+            return Push(MainMenu())
         (player,) = players
+        player_pos = player.components[Position]
 
         match event:
             case tcod.event.Quit():
                 raise SystemExit()
-        # MOVEMENT GO
+
             case tcod.event.KeyDown(sym=sym) if sym in DIRECTION_KEYS:
-                # new_position == players current position + new direction, POSITIONAL EVENTS
+
+                # Positional events trigger
                 new_position = player.components[Position] + DIRECTION_KEYS[sym]
-                if block_movement(g.world, new_position):
-                    return None
-
-                #  TODO: other immovables here? / traps
-
-                # player position is updated to new_position if there is no wall
-                player.components[Position] = new_position
-                #print(f"Player position: {player.components[Position]}")
                 
-                # Auto pickup gold // TODO: reuse for other items, append to inventory
+                # --- Player Attacking ---
+            
+                enemy = next(
+                    (e for e in g.world.Q.all_of(components=[Position], tags=[IsEnemy])
+                     if e.components[Position] == new_position),
+                    None 
+                    )
+                
+                if enemy:
+                    Player.melee_attack(g.world, player, g.world[None].components[Random], target=enemy)
+                    return None
+                
+                if Player.block_movement(g.world, new_position):
+                    return None
+                
+                player.components[Position] = new_position
+
+                # --- Auto pickup gold --- TODO: item pickup here?
+                # maybe move to player class
+
                 for gold in g.world.Q.all_of(components=[Gold], tags=[player.components[Position], IsItem]):
                     player.components[Gold] = player.components.get(Gold, 0) + gold.components[Gold]
-                    text = f"Picked up {gold.components[Gold]}g, total: {player.components[Gold]}g"
+                    text = f"Picked up {gold.components[Gold]}g"
                     g.world[None].components[("Text", str)] = text
                     gold.clear()
 
+                # --- Enemy Movement, Pathfinding and Attacking ---
 
-                # move enemies after player // TODO: I dont like static 
-                enemies_move_random(g.world, 80, 50, g.world[None].components[Random])
-                # pathfind for enemy
+                Enemy.enemy_move_random(g.world, 80, 50, g.world[None].components[Random])
+
                 for enemy_entity in g.world.Q.all_of(components=[Position, Graphic], tags={IsEnemy}):
-                    enemy_pathfind(g.world, fov_map, player, enemy_entity)
-                    enemy_melee(g.world, enemy_entity, g.world[None].components[Random])
+                    enemy_pos = enemy_entity.components[Position]
+                    if abs(enemy_pos.x - player_pos.x) + abs(enemy_pos.y - player_pos.y) == 1:
+                        Enemy.melee_attack(g.world, enemy_entity, g.world[None].components[Random], target=player)
+                    else:
+                        Enemy.enemy_pathfind(g.world, fov_map, player, enemy_entity)
 
-                # player attacking 
-                player_melee(g.world, player, g.world[None].components[Random])
-                
 
                 # recompute fov after player movement
                 recompute_fov(fov_map, new_position.x, new_position.y, radius=TORCH_RADIUS)
@@ -75,9 +87,7 @@ class InGame:
             case tcod.event.KeyDown(sym=sym) if sym in INTERACTION_KEYS:
             # check adjacent tiles (including current position) for doors // TODO: ^^ seperate this
                 player_pos = player.components[Position]
-                door_interaction(g.world, player, player_pos)
-
-
+                Player.door_interaction(g.world, player, player_pos)
 
             case tcod.event.KeyDown(sym=KeySym.ESCAPE):
                 return Push(MainMenu())
