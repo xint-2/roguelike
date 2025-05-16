@@ -3,7 +3,7 @@
 # TODO: make a seperate file with graphics array -> array = (ch=(ord("#"), fg=(255, 255, 255), bg=(0, 0, 0), etc..)
 # TODO: make algorithm to generate dungeon
 
-
+from game.classes import Actor
 from game.components import Position, Graphic, Gold, DoorState
 from game.tags import *
 
@@ -28,13 +28,19 @@ def can_spawn_item(world, position):
     return True
 
 # draw player 
+
 def draw_player(world, console_width, console_height):
-    player = world[object()]
-    player_position = Position(console_width // 2, console_height // 2)
-    player.components[Position] = player_position
-    player.components[Graphic] = Graphic(ord("@"))
-    player.components[Gold] = 0
-    player.tags |= {IsPlayer, IsActor}
+    actor_instance = Actor()
+    player_entity = actor_instance.spawn_actor(
+        world,
+        console_width // 2,
+        console_height // 2,
+        ch="@",
+        fg=[255, 255, 255],
+        name="Player",
+        gold=0,
+        is_player=True
+        )
 
 
 # draw gold // TODO: make items class
@@ -80,7 +86,7 @@ def draw_square_room(world, size, offset_x, offset_y):
             door.components[DoorState] = DoorState(is_open=False)
             door.tags |= {IsDoor}
             # mark as passable or interactable
-            print(f"Door created at {offset_positon}")
+            #print(f"Door created at {offset_positon}")
 
     # create walls for the room
         elif room_pos.x == 0 or room_pos.x == size - 1 or room_pos.y == 0 or room_pos.y == size - 1:
@@ -121,7 +127,7 @@ def draw_rectangle_room(world, width, height, offset_x, offset_y):
             door.components[DoorState] = DoorState(is_open=False)
             door.tags |= {IsDoor}
             # mark as passable or interactable
-            print(f"Door created at {offset_position}")
+            #print(f"Door created at {offset_position}")
 
     # create walls for the room
         elif room_pos.x == 0 or room_pos.x == width - 1 or room_pos.y == 0 or room_pos.y == height - 1:
@@ -146,5 +152,5 @@ def draw_downwards_stair(world, rng):
     down_stair.components[Position] = edgerand
     down_stair.components[Graphic] = Graphic(ord("<"), fg=(200, 200, 200))
     down_stair.tags |= {IsLevelChange}
-    print(f"down stair created at {edgerand}")
+    #print(f"down stair created at {edgerand}")
 

@@ -11,11 +11,11 @@ import game.menus
 from game.world_tools import new_world
 from game.components import Gold, Graphic, Position, DoorState
 from game.constants import DIRECTION_KEYS, INTERACTION_KEYS, CARDINAL
-from game.tags import * # Make into a list?
+from game.tags import * 
 from game.state import Push, Reset, State, StateResult
 from game.FOV import recompute_fov, fov_map, TORCH_RADIUS
-from game.interaction import door_interaction, block_movement
-from game.enemy import enemies_move_random, enemy_pathfind, enemy_blocked
+from game.interaction import door_interaction, block_movement, player_melee
+from game.enemy import enemies_move_random, enemy_pathfind, enemy_melee
 
 
 @attrs.define()
@@ -24,8 +24,10 @@ class InGame:
     visible = attrs.field(default=None)
     def on_event(self, event: tcod.event.Event) -> None:
         # tcod-ecs query, fetch player entity
-        (player,) = g.world.Q.all_of(tags=[IsPlayer])
-
+        players = list(g.world.Q.all_of(tags=[IsPlayer]))
+        if not players:
+            raise RuntimeError("No player entity found!")
+        (player,) = players
 
         match event:
             case tcod.event.Quit():
@@ -45,7 +47,7 @@ class InGame:
                 
                 # Auto pickup gold // TODO: reuse for other items, append to inventory
                 for gold in g.world.Q.all_of(components=[Gold], tags=[player.components[Position], IsItem]):
-                    player.components[Gold] += gold.components[Gold]
+                    player.components[Gold] = player.components.get(Gold, 0) + gold.components[Gold]
                     text = f"Picked up {gold.components[Gold]}g, total: {player.components[Gold]}g"
                     g.world[None].components[("Text", str)] = text
                     gold.clear()
@@ -56,6 +58,11 @@ class InGame:
                 # pathfind for enemy
                 for enemy_entity in g.world.Q.all_of(components=[Position, Graphic], tags={IsEnemy}):
                     enemy_pathfind(g.world, fov_map, player, enemy_entity)
+                    enemy_melee(g.world, enemy_entity, g.world[None].components[Random])
+
+                # player attacking 
+                player_melee(g.world, player, g.world[None].components[Random])
+                
 
                 # recompute fov after player movement
                 recompute_fov(fov_map, new_position.x, new_position.y, radius=TORCH_RADIUS)
@@ -69,6 +76,7 @@ class InGame:
             # check adjacent tiles (including current position) for doors // TODO: ^^ seperate this
                 player_pos = player.components[Position]
                 door_interaction(g.world, player, player_pos)
+
 
 
             case tcod.event.KeyDown(sym=KeySym.ESCAPE):
@@ -121,6 +129,16 @@ class InGame:
 
         if text := g.world[None].components.get(("Text", str)):
             console.print(x=0, y=console.height - 1, string=text, fg=(255, 255, 255), bg=(0, 0, 0))
+
+        # --- draw player stats ---
+        players = list(g.world.Q.all_of(tags=[IsPlayer]))
+        if players:
+            player = players[0]
+            attrs = player.components.get("attributes", {})
+            hp = player.components.get("hp", 0)
+            gold = player.components.get(("Gold", int), 0)
+            stats_str = f"HP: {hp:.0f}  Gold: {gold}  STR: {attrs.get('STR', 0)}  DEX: {attrs.get('DEX', 0)}  CON: {attrs.get('CON', 0)} INT: {attrs.get('INT', 0)} WIS: {attrs.get('WIS', 0)} CHR: {attrs.get('CHR', 0)}"
+            console.print(x=0, y=0, string=stats_str, fg=(255, 255, 255), bg=(0, 0, 0))
             
 
 class MainMenu(game.menus.ListMenu):

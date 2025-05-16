@@ -4,8 +4,25 @@
 
 
 import tcod.los
+from game.constants import CARDINAL
+from game.classes import Actor
 from game.components import *
-from game.tags import IsActor, IsEnemy, IsWall, IsDoor
+from game.tags import IsActor, IsPlayer, IsEnemy, IsWall, IsDoor
+
+# hard-coded enemy melee attack
+# if enemy is adjacent to player, ATTACK!
+# TODO: needs rework
+def enemy_melee(world, enemy_entity, rng):
+    enemy_pos = enemy_entity.components[Position]
+    for dx, dy in CARDINAL:
+        check_pos = Position(enemy_pos.x + dx, enemy_pos.y + dy)
+        for player in world.Q.all_of(components=[Position], tags=[IsPlayer]):
+            damage_roll = rng.randint(1, 3)
+            if player.components[Position] == check_pos:
+                player.components["hp"] = player.components["hp"] - damage_roll
+                text = f"{enemy_entity.components["name"]} attacks!, {player.components["name"]} takes {damage_roll} damage!"
+                world[None].components[("Text", str)] = text
+
 
 
 # enemies cannot move through walls and closed doors, other actors
@@ -19,7 +36,7 @@ def enemy_blocked(world, enemy_pos):
     # doors
     if any(
         door.components[Position] == enemy_pos
-        for door in world.Q.all_of(components=[Position, DoorState], tags=[IsWall])
+        for door in world.Q.all_of(components=[Position, DoorState], tags=[IsDoor])
     ):
         return True
     # actors
@@ -50,31 +67,25 @@ def enemies_move_random(world, map_width, map_height, rng):
 
 
 # spawn enemies prototype // TODO: make enemies start in small group
-# TODO: make a new class for enemies, use this function to spawn them
-# TODO: make static roll
 def draw_enemies(world, rng, console_width, console_height):
+
     num_monsters = rng.randint(0, 10)
 
     for i in range(num_monsters):
         pos_x = rng.randint(0, console_width - 5)
         pos_y = rng.randint(0, console_height - 5)
-
         roll = rng.randint(0, 100)
+
+        actor_instance = Actor()
         if roll < 60:
-            monster = world[object()]
-            monster.components[Position] = Position(pos_x, pos_y)
-            monster.components[Graphic] = Graphic(ord("o"), fg=(0, 255, 0))
-            monster.tags |= {IsActor, IsEnemy}
+            enemy = actor_instance.spawn_actor(world, pos_x, pos_y, ch="o", fg=(0, 255, 0), name="Orc")
+            enemy.tags |= {IsEnemy}
         elif roll < 90:
-            monster = world[object()]
-            monster.components[Position] = Position(pos_x, pos_y)
-            monster.components[Graphic] = Graphic(ord("T"), fg=(0, 255, 0))
-            monster.tags |= {IsActor, IsEnemy}
+            enemy = actor_instance.spawn_actor(world, pos_x, pos_y, ch="T", fg=(0, 255, 0), name="Troll")
+            enemy.tags |= {IsEnemy}
         else:
-            monster = world[object()]
-            monster.components[Position] = Position(pos_x, pos_y)
-            monster.components[Graphic] = Graphic(ord("B"), fg=(100, 100, 255))
-            monster.tags |= {IsActor, IsEnemy}
+            enemy = actor_instance.spawn_actor(world, pos_x, pos_y, ch="b", fg=(100, 100, 255), name="Bat")
+            enemy.tags |= {IsEnemy}
 
 # get bresenham line between monster and player position -> if enemy is in FOV, calculate and return bresenham
 # TODO: IndexError bug here
