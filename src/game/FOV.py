@@ -42,6 +42,8 @@ def update_fov_map_from_world(world):
     # First, set floors/ground to True
     for entity in world.Q.all_of(components=[Position]):
         pos = entity.components[Position]
+        if not hasattr(pos, "x") or not hasattr(pos, "y"):
+            continue
         if 0 <= pos.x < MAP_WIDTH and 0 <= pos.y < MAP_HEIGHT:
             if IsFloor in entity.tags or IsGround in entity.tags:
                 fov_map.walkable[pos.y, pos.x] = True

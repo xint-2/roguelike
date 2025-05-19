@@ -1,3 +1,7 @@
+# TODO: Implement enemy counter attacking!, make it better
+# TODO: make a better log display -> display more lines
+# TODO: dungeon generation
+
 
 import attrs
 import tcod.console
@@ -22,12 +26,16 @@ class InGame:
     # Primary in-game state.
     visible = attrs.field(default=None)
     def on_event(self, event: tcod.event.Event) -> None:
+
         # tcod-ecs query, fetch player entity
         players = list(g.world.Q.all_of(tags=[IsPlayer]))
         if not players:
+            print("Player died")
             return Push(MainMenu())
         (player,) = players
         player_pos = player.components[Position]
+
+        rng = g.world[None].components[Random]
 
         match event:
             case tcod.event.Quit():
@@ -37,9 +45,8 @@ class InGame:
 
                 # Positional events trigger
                 new_position = player.components[Position] + DIRECTION_KEYS[sym]
-                
-                # --- Player Attacking ---
             
+                # melee_attack enemy
                 enemy = next(
                     (e for e in g.world.Q.all_of(components=[Position], tags=[IsEnemy])
                      if e.components[Position] == new_position),
@@ -47,9 +54,11 @@ class InGame:
                     )
                 
                 if enemy:
-                    Player.melee_attack(g.world, player, g.world[None].components[Random], target=enemy)
+                    Player.melee_attack(g.world, player, rng=rng, target=enemy)
+                    Enemy.counterstrike(g.world, enemy, rng, player)
                     return None
                 
+                # player movement block, cannot pass through walls, etc...
                 if Player.block_movement(g.world, new_position):
                     return None
                 
@@ -66,9 +75,9 @@ class InGame:
 
                 # --- Enemy Movement, Pathfinding and Attacking ---
 
-                Enemy.enemy_move_random(g.world, 80, 50, g.world[None].components[Random])
 
                 for enemy_entity in g.world.Q.all_of(components=[Position, Graphic], tags={IsEnemy}):
+                    Enemy.enemy_move_random_single(g.world, enemy_entity=enemy_entity, map_width=80, map_height=50, rng=rng)
                     enemy_pos = enemy_entity.components[Position]
                     if abs(enemy_pos.x - player_pos.x) + abs(enemy_pos.y - player_pos.y) == 1:
                         Enemy.melee_attack(g.world, enemy_entity, g.world[None].components[Random], target=player)
@@ -94,7 +103,6 @@ class InGame:
             case _:
                 return None
 
-
     def on_draw(self, console: tcod.console.Console) -> None:
 
         # only draw entities if they are visible
@@ -118,6 +126,8 @@ class InGame:
         for entity in g.world.Q.all_of(components=[Position, Graphic]):
             pos = entity.components[Position]
         # if the entity is within the bounds of the console
+            if not hasattr(pos, "x") or not hasattr(pos, "y"):
+                continue
             if not (0 <= pos.x < console.width and 0 <= pos.y < console.height):
                 continue
         # if the entity is not visible, go to next entity
@@ -137,8 +147,13 @@ class InGame:
             console.fg[y, x] = graphic.fg
         # Optionally: console.bg[y, x] = graphic.bg if you use backgrounds
 
-        if text := g.world[None].components.get(("Text", str)):
-            console.print(x=0, y=console.height - 1, string=text, fg=(255, 255, 255), bg=(0, 0, 0))
+        #if text := g.world[None].components.get(("Text", str)):
+            #console.print(x=0, y=console.height - 1, string=text, fg=(255, 255, 255), bg=(0, 0, 0))
+
+        log = g.world[None].components.get(("MessageLog", list), [])
+        log_y = console.height - len(log) - 1
+        for i, msg in enumerate(log):
+            console.print(x=0, y=log_y + i, string=msg, fg=(255, 255, 255), bg=(0, 0, 0))
 
         # --- draw player stats ---
         players = list(g.world.Q.all_of(tags=[IsPlayer]))
@@ -149,6 +164,7 @@ class InGame:
             gold = player.components.get(("Gold", int), 0)
             stats_str = f"HP: {hp:.0f}  Gold: {gold}  STR: {attrs.get('STR', 0)}  DEX: {attrs.get('DEX', 0)}  CON: {attrs.get('CON', 0)} INT: {attrs.get('INT', 0)} WIS: {attrs.get('WIS', 0)} CHR: {attrs.get('CHR', 0)}"
             console.print(x=0, y=0, string=stats_str, fg=(255, 255, 255), bg=(0, 0, 0))
+
             
 
 class MainMenu(game.menus.ListMenu):
