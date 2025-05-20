@@ -1,4 +1,6 @@
 # functions for working with worlds.
+# TODO: make doors spawn right
+# TODO: move BSP dungeon gen to static classes 
 
 from tcod.ecs import Registry
 import tcod.los
@@ -16,6 +18,8 @@ from game.dungeon_partition import Rect, make_bsp_rooms
 # Think of the ECS registry as containing the world since this is how it will be used.
 # Start this function with world = Registry().
 
+
+# TODO: make class for BSP stuff -> classes.py
 def new_world(console_width: int, console_height: int) -> Registry:
     # return a freshly generated world.
     world = Registry()
@@ -42,7 +46,18 @@ def new_world(console_width: int, console_height: int) -> Registry:
 
     for corridor in corridors:
         (x1, y1), (x2, y2) = corridor
-        # draw a door at start and end of a corridor
+        # 50 % chance to draw a door at start of a corridor
+        if random.random() < 0.5:
+            for (dx, dy) in bresenham_line(x1, y1, x2, y2):
+                if (dx, dy) not in floor_positions:
+                    door_position = Position(dx, dy)
+                    door = world[object()]
+                    door.components[Position] = door_position
+                    door.components[Graphic] = Graphic(ord("+"), fg=(200, 180, 50))
+                    door.components[DoorState] = DoorState(is_open=False)
+                    door.tags |= {IsDoor}
+                    break
+        # draw corridor floor
         for x,y in bresenham_line(x1, y1, x2, y2):
             floor_positions.add((x, y))
             floor = world[object()]
@@ -91,9 +106,47 @@ def new_world(console_width: int, console_height: int) -> Registry:
         for i in range(num_enemies):
             if i < len(availabe_positions):
                 x, y = availabe_positions[i]
-                Enemy.draw_enemy(world, rng, x, y)
-
+                #Enemy.draw_enemy(world, rng, x, y)
 
     update_fov_map_from_world(world)
     # update FOV LAST!
     return world
+
+
+# Add other stuff here
+def new_level(world: Registry, console_width: int, console_height: int) -> None:
+        # 1) find the player entity and save it
+    players = list(world.Q.all_of(tags=[IsPlayer]))
+    if not players:
+        raise RuntimeError("No player found!")
+    player = players[0]
+    player_pos = player.components[Position]
+
+        # 2) remove all entities except the player
+    for entity in list(world.Q.all_of(components=[Position])):
+        if entity is player:
+            continue
+        world[entity].clear()
+
+        # 3) generate new dungeon layour
+    rooms, corridors = make_bsp_rooms(map_width=console_width, map_height=console_height)
+    floor_positions = set()
+    for room in rooms:
+        for x in range(room.x1, room.x2):
+            for y in range(room.y1, room.y2):
+                floor_positions.add((x, y))
+                floor = world[object()]
+                floor.components[Position] = Position(x, y)
+                floor.components[Graphic] = Graphic(ord("'"), fg=(100, 100, 100))
+                floor.tags |= {IsFloor}
+    # ...repeat for corridors, walls, doors, etc. as in new_world...
+
+    # 4. Place player at new starting position
+    if floor_positions:
+        x, y = next(iter(floor_positions))
+        player.components[Position] = Position(x, y)
+
+    # 5. Place stairs, enemies, items, etc.
+    # ...same as in new_world...
+
+    update_fov_map_from_world(world)

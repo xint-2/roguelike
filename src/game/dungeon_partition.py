@@ -3,7 +3,7 @@
 # TODO: create connect rooms functions
 
 import tcod.bsp
-import tcod.random
+from tcod import libtcodpy
 
 class Rect:
     def __init__(self, x, y, w, h):
@@ -88,14 +88,13 @@ def make_bsp_rooms(map_width=80, map_height=60, depth=5, min_size=6):
                     rcx, rcy = right_room.center()
                     left_edge = left_room.closest_edge_point(rcx, rcy)
                     right_edge = right_room.closest_edge_point(lcx, lcy)
-                    # mark door positions
-                # simple straight corridor
-                if tcod.random_get_int(0, 0, 1):
-                    corridors.append((left_edge, (right_edge[0], left_edge[1])))
-                    corridors.append(((right_edge[0], left_edge[1]), right_edge))
-                else:
-                    corridors.append((left_edge, (left_edge[0], right_edge[1])))
-                    corridors.append(((left_edge[0], right_edge[1]), right_edge))
+                    # simple straight corridor
+                    if libtcodpy.random_get_int(0, 0, 1):
+                        corridors.append((left_edge, (right_edge[0], left_edge[1])))
+                        corridors.append(((right_edge[0], left_edge[1]), right_edge))
+                    else:
+                        corridors.append((left_edge, (left_edge[0], right_edge[1])))
+                        corridors.append(((left_edge[0], right_edge[1]), right_edge))
 
                     
         return rooms, corridors

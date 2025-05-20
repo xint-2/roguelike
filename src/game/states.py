@@ -12,19 +12,21 @@ from random import Random
 
 import g
 import game.menus
-from game.world_tools import new_world
-from game.components import Gold, Graphic, Position, DoorState
+from game.world_tools import new_world, new_level
+from game.components import Gold, Graphic, Position
 from game.constants import DIRECTION_KEYS, INTERACTION_KEYS
 from game.tags import * 
 from game.state import Push, Reset, State, StateResult
 from game.FOV import recompute_fov, fov_map, TORCH_RADIUS
 from game.classes import Player, Enemy
+import game.world_tools
 
 
 @attrs.define()
 class InGame:
     # Primary in-game state.
     visible = attrs.field(default=None)
+    turns = attrs.field(default=0)
     def on_event(self, event: tcod.event.Event) -> None:
 
         # tcod-ecs query, fetch player entity
@@ -44,7 +46,17 @@ class InGame:
             case tcod.event.KeyDown(sym=sym) if sym in DIRECTION_KEYS:
 
                 # Positional events trigger
+                direction = DIRECTION_KEYS[sym]
                 new_position = player.components[Position] + DIRECTION_KEYS[sym]
+                self.turns += 1
+
+                # player regenrates 2 hp and mp every 20 turns
+                if self.turns % 10 == 0:
+                    print("regenerated")
+                    max_hp = player.components.get("max_hp", 10)
+                    player.components["hp"] = min(player.components.get("hp", 0) + 1, max_hp)
+                    max_mp = player.components.get("max_mp", 10)
+                    player.components["mp"] = min(player.components.get("mp", 0) + 1, max_mp)
             
                 # melee_attack enemy
                 enemy = next(
@@ -74,8 +86,7 @@ class InGame:
                     gold.clear()
 
                 # --- Enemy Movement, Pathfinding and Attacking ---
-
-
+                
                 for enemy_entity in g.world.Q.all_of(components=[Position, Graphic], tags={IsEnemy}):
                     Enemy.enemy_move_random_single(g.world, enemy_entity=enemy_entity, map_width=80, map_height=50, rng=rng)
                     enemy_pos = enemy_entity.components[Position]
@@ -95,8 +106,22 @@ class InGame:
         # INTERACTION GO
             case tcod.event.KeyDown(sym=sym) if sym in INTERACTION_KEYS:
             # check adjacent tiles (including current position) for doors // TODO: ^^ seperate this
+                action = INTERACTION_KEYS[sym]
                 player_pos = player.components[Position]
-                Player.door_interaction(g.world, player, player_pos)
+
+                if action == "interact":
+                    Player.door_interaction(g.world, player, player_pos)
+                    return None
+                
+                # need to implement new_level generation, save char stats but go to a new level
+                if action == "stairs":
+                    for entity in g.world.Q.all_of(components=[Position], tags=[IsLevelChange]):
+                        if entity.components[Position] == player_pos:
+                            game.world_tools.new_level(g.world, 80, 50)
+                            return Reset(InGame())
+                    g.world[None].components[("Text", str)] = "You are not standing on stairs."
+                    return None
+
 
             case tcod.event.KeyDown(sym=KeySym.ESCAPE):
                 return Push(MainMenu())
@@ -161,8 +186,9 @@ class InGame:
             player = players[0]
             attrs = player.components.get("attributes", {})
             hp = player.components.get("hp", 0)
+            mp = player.components.get("mp", 0)
             gold = player.components.get(("Gold", int), 0)
-            stats_str = f"HP: {hp:.0f}  Gold: {gold}  STR: {attrs.get('STR', 0)}  DEX: {attrs.get('DEX', 0)}  CON: {attrs.get('CON', 0)} INT: {attrs.get('INT', 0)} WIS: {attrs.get('WIS', 0)} CHR: {attrs.get('CHR', 0)}"
+            stats_str = f" Turn: {self.turns} HP: {hp:.0f} MP: {mp:.0f}  Gold: {gold}  STR: {attrs.get('STR', 0)}  DEX: {attrs.get('DEX', 0)}  CON: {attrs.get('CON', 0)} INT: {attrs.get('INT', 0)} WIS: {attrs.get('WIS', 0)} CHR: {attrs.get('CHR', 0)}"
             console.print(x=0, y=0, string=stats_str, fg=(255, 255, 255), bg=(0, 0, 0))
 
             

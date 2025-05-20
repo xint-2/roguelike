@@ -20,6 +20,7 @@ DIRECTION_KEYS: Final = {
     KeySym.KP_1: (-1, 1),
     KeySym.KP_9: (1, -1),
     KeySym.KP_3: (1, 1),
+    KeySym.KP_5: (0, 0),
 
     # Arrow keys
     KeySym.LEFT: (-1, 0),
@@ -31,6 +32,8 @@ DIRECTION_KEYS: Final = {
 INTERACTION_KEYS: Final = {
     
     KeySym.e: "interact",
+    # interact and go down stairs
+    KeySym.d: "stairs"
 
 
 

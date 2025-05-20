@@ -49,7 +49,12 @@ class Actor():
         actor.components["items"] = list(self.items)
         actor.components["Gold"] = gold
         actor.components["name"] = name
-        actor.components["hp"] = ((self.attributes["STR"] * 0.5) + self.attributes["CON"])
+        max_hp = (self.attributes["STR"] * 0.5) + self.attributes["CON"]
+        actor.components["max_hp"] = max_hp
+        actor.components["hp"] = max_hp
+        max_mp = self.attributes["INT"] + self.attributes["WIS"] * 0.5
+        actor.components["max_mp"] = max_mp
+        actor.components["mp"] = max_mp
         actor.tags |= {IsActor}
 
         # change this later for neutral NPCS
@@ -100,6 +105,8 @@ class Actor():
 class Player(Actor):
     def __init__(self):
         super().__init__()
+        experience = 0
+        to_level = 100
 
     def draw_player(world, x, y):
         actor_instance = Actor()
@@ -138,7 +145,7 @@ class Enemy(Actor):
     def __init__(self):
         super().__init__()
 
-    # this draws a group of enemies 
+    # this draws a group of enemies s
     # TODO: refine this
     @staticmethod
     def enemy_move_random_single(world, enemy_entity, map_width, map_height, rng):
@@ -229,6 +236,7 @@ class Enemy(Actor):
                 enemy_entity.components[Position] = new_pos
 
 # --- Static entities ---
+# mostly outdated
 class Static():
     position: Position = attrs.field(factory=lambda: Position(0, 0))
     graphic: Graphic = attrs.field(factory=lambda: Graphic(ord("")))
